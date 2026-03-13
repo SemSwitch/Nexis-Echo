@@ -8,11 +8,21 @@ Thumbs.db
 *.swp
 *.swo
 .agents/
+/tasks/
+/notes/
+/research/
+/specs/private/
+/prompts/private/
+/fixtures/private/
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
+*.local.json
+*.secrets.json
+config.local.json
+config.dev.json
 *.key
 *.pem
 *.p12
@@ -22,6 +32,7 @@ credentials.*
 secrets.*
 
 # Go
+/*.exe
 bin/
 dist/
 build/
