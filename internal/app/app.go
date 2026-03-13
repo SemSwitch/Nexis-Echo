@@ -51,9 +51,34 @@ func defaultServices(cfg config.Config, logger *slog.Logger) []runtime.Service {
 	}
 
 	buffer := runtime.NewBuffer(runtime.BufferConfig{}, logger)
+	summarizer := runtime.NewSummarizer(runtime.SummarizerConfig{
+		MaxBatchSize: cfg.Summarizer.MaxBatchSize,
+		Provider:     cfg.Summarizer.Provider,
+		CacheEntries: cfg.Summarizer.CacheEntries,
+		QueueSize:    cfg.Summarizer.QueueSize,
+		MinInterval:  cfg.Summarizer.MinInterval,
+	}, logger)
+	pipeline := runtime.NewPipeline(runtime.PipelineConfig{
+		Channels: cfg.Pipeline.Channels,
+	}, logger)
+	tts := runtime.NewTTS(runtime.TTSConfig{
+		Voice:     cfg.TTS.Voice,
+		MaxQueued: cfg.TTS.MaxQueued,
+	}, logger)
+
+	log := ensureAppLogger(logger)
+	if !wireClosedBlockFlow(log, buffer, summarizer) {
+		log.Error("failed to wire closed block flow", "producer", buffer.Name(), "consumer", summarizer.Name())
+	}
+	if !wireNotificationFlow(log, summarizer, pipeline) {
+		log.Error("failed to wire notification flow", "producer", summarizer.Name(), "consumer", pipeline.Name())
+	}
 
 	return []runtime.Service{
 		buffer,
+		summarizer,
+		pipeline,
+		tts,
 		runtime.NewConsumer(runtime.ConsumerConfig{
 			ClientName:     "nexis-echo",
 			URL:            cfg.NATS.URL,
@@ -64,16 +89,6 @@ func defaultServices(cfg config.Config, logger *slog.Logger) []runtime.Service {
 			RawSubject:     subjects[0],
 			ClosedSubject:  subjects[1],
 			Sink:           buffer,
-		}, logger),
-		runtime.NewSummarizer(runtime.SummarizerConfig{
-			MaxBatchSize: cfg.Summarizer.MaxBatchSize,
-		}, logger),
-		runtime.NewPipeline(runtime.PipelineConfig{
-			Channels: cfg.Pipeline.Channels,
-		}, logger),
-		runtime.NewTTS(runtime.TTSConfig{
-			Voice:     cfg.TTS.Voice,
-			MaxQueued: cfg.TTS.MaxQueued,
 		}, logger),
 	}
 }

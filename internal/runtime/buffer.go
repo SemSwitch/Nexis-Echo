@@ -33,6 +33,7 @@ type Buffer struct {
 	mu           sync.Mutex
 	state        model.ServiceState
 	liveSink     func(model.RuntimeEvent)
+	closedSink   func(model.OutputBlock)
 	sources      map[string]*bufferedSource
 	closedBlocks []model.OutputBlock
 }
@@ -175,6 +176,7 @@ func (b *Buffer) HandleOutputClosed(_ context.Context, payload model.OutputClose
 		TS:     closedAt,
 		Data:   snapshot,
 	})
+	b.emitClosedBlock(block)
 
 	return nil
 }
@@ -184,6 +186,13 @@ func (b *Buffer) RegisterRuntimeEventSink(sink func(model.RuntimeEvent)) {
 	defer b.mu.Unlock()
 
 	b.liveSink = sink
+}
+
+func (b *Buffer) RegisterClosedBlockSink(sink func(model.OutputBlock)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.closedSink = sink
 }
 
 func (b *Buffer) SourceStates(context.Context) []model.SourceState {
@@ -251,6 +260,18 @@ func (b *Buffer) emit(event model.RuntimeEvent) {
 	}
 
 	sink(event)
+}
+
+func (b *Buffer) emitClosedBlock(block model.OutputBlock) {
+	b.mu.Lock()
+	sink := b.closedSink
+	b.mu.Unlock()
+
+	if sink == nil {
+		return
+	}
+
+	sink(block)
 }
 
 func nonZeroTime(value time.Time) time.Time {

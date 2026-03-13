@@ -40,7 +40,11 @@ type NATSConfig struct {
 }
 
 type SummarizerConfig struct {
-	MaxBatchSize int `json:"max_batch_size"`
+	MaxBatchSize int      `json:"max_batch_size"`
+	Provider     string   `json:"provider"`
+	CacheEntries int      `json:"cache_entries"`
+	QueueSize    int      `json:"queue_size"`
+	MinInterval  Duration `json:"min_interval"`
 }
 
 type PipelineConfig struct {
@@ -107,6 +111,10 @@ func Default() Config {
 		},
 		Summarizer: SummarizerConfig{
 			MaxBatchSize: 32,
+			Provider:     "heuristic",
+			CacheEntries: 256,
+			QueueSize:    64,
+			MinInterval:  Duration(100 * time.Millisecond),
 		},
 		Pipeline: PipelineConfig{
 			Channels: []string{"local"},
@@ -204,6 +212,16 @@ func applyEnv(cfg *Config) error {
 	if err := applyEnvInt(envPrefix+"SUMMARIZER_MAX_BATCH_SIZE", &cfg.Summarizer.MaxBatchSize); err != nil {
 		return err
 	}
+	applyEnvString(envPrefix+"SUMMARIZER_PROVIDER", &cfg.Summarizer.Provider)
+	if err := applyEnvInt(envPrefix+"SUMMARIZER_CACHE_ENTRIES", &cfg.Summarizer.CacheEntries); err != nil {
+		return err
+	}
+	if err := applyEnvInt(envPrefix+"SUMMARIZER_QUEUE_SIZE", &cfg.Summarizer.QueueSize); err != nil {
+		return err
+	}
+	if err := applyEnvDuration(envPrefix+"SUMMARIZER_MIN_INTERVAL", &cfg.Summarizer.MinInterval); err != nil {
+		return err
+	}
 
 	if err := applyEnvCSV(envPrefix+"PIPELINE_CHANNELS", &cfg.Pipeline.Channels); err != nil {
 		return err
@@ -246,6 +264,7 @@ func normalize(cfg *Config) error {
 	cfg.NATS.URL = strings.TrimSpace(cfg.NATS.URL)
 	cfg.NATS.SubjectRoot = strings.Trim(cfg.NATS.SubjectRoot, ". ")
 	cfg.NATS.Queue = strings.TrimSpace(cfg.NATS.Queue)
+	cfg.Summarizer.Provider = strings.ToLower(strings.TrimSpace(cfg.Summarizer.Provider))
 	cfg.TTS.Voice = strings.TrimSpace(cfg.TTS.Voice)
 	cfg.HTTP.Addr = strings.TrimSpace(cfg.HTTP.Addr)
 	cfg.HTTP.WebSocketPath = strings.TrimSpace(cfg.HTTP.WebSocketPath)
@@ -306,6 +325,18 @@ func validate(cfg Config) error {
 
 	if cfg.Summarizer.MaxBatchSize <= 0 {
 		errs = append(errs, errors.New("summarizer.max_batch_size must be greater than zero"))
+	}
+	if cfg.Summarizer.Provider == "" {
+		errs = append(errs, errors.New("summarizer.provider must not be empty"))
+	}
+	if cfg.Summarizer.CacheEntries <= 0 {
+		errs = append(errs, errors.New("summarizer.cache_entries must be greater than zero"))
+	}
+	if cfg.Summarizer.QueueSize <= 0 {
+		errs = append(errs, errors.New("summarizer.queue_size must be greater than zero"))
+	}
+	if time.Duration(cfg.Summarizer.MinInterval) < 0 {
+		errs = append(errs, errors.New("summarizer.min_interval must be zero or greater"))
 	}
 
 	if len(cfg.Pipeline.Channels) == 0 {

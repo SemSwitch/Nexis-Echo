@@ -107,3 +107,39 @@ func TestBufferPublishesRuntimeEvents(t *testing.T) {
 		t.Fatalf("expected fourth event to be source updated, got %q", events[3].Type)
 	}
 }
+
+func TestBufferPublishesClosedBlocks(t *testing.T) {
+	buffer := NewBuffer(BufferConfig{}, nil)
+	blocks := make([]model.OutputBlock, 0, 1)
+
+	buffer.RegisterClosedBlockSink(func(block model.OutputBlock) {
+		blocks = append(blocks, block)
+	})
+
+	if err := buffer.HandleRawOutput(context.Background(), model.RawOutput{
+		Source: "builder",
+		Chunk:  "running build\n",
+		TS:     time.Date(2026, time.March, 12, 23, 55, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("handle raw output: %v", err)
+	}
+
+	if err := buffer.HandleOutputClosed(context.Background(), model.OutputClosed{
+		Source: "builder",
+		Status: "success",
+		Final:  true,
+		TS:     time.Date(2026, time.March, 12, 23, 56, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("handle output closed: %v", err)
+	}
+
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 closed block, got %d", len(blocks))
+	}
+	if blocks[0].Source != "builder" {
+		t.Fatalf("expected block source %q, got %q", "builder", blocks[0].Source)
+	}
+	if blocks[0].Content != "running build\n" {
+		t.Fatalf("expected block content to match buffered text, got %q", blocks[0].Content)
+	}
+}

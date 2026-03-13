@@ -1,6 +1,11 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Severity classifies the urgency or outcome of a notification.
 type Severity int
@@ -24,6 +29,56 @@ func (s Severity) String() string {
 		return "error"
 	default:
 		return "unknown"
+	}
+}
+
+// MarshalJSON keeps severity payloads stable and readable in runtime events.
+func (s Severity) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+// UnmarshalJSON accepts either a string label or legacy integer severity.
+func (s *Severity) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	if data[0] == '"' {
+		var raw string
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+
+		parsed, err := parseSeverity(raw)
+		if err != nil {
+			return err
+		}
+
+		*s = parsed
+		return nil
+	}
+
+	var raw int
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("severity must be a string or integer: %w", err)
+	}
+
+	*s = Severity(raw)
+	return nil
+}
+
+func parseSeverity(value string) (Severity, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "success":
+		return SeveritySuccess, nil
+	case "info":
+		return SeverityInfo, nil
+	case "warning", "warn":
+		return SeverityWarning, nil
+	case "error":
+		return SeverityError, nil
+	default:
+		return SeverityInfo, fmt.Errorf("unknown severity %q", value)
 	}
 }
 
