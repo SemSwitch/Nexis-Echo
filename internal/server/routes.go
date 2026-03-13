@@ -8,6 +8,7 @@ import (
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
+	s.mux.HandleFunc("GET /api/sources", s.handleSources)
 	s.mux.HandleFunc("GET "+s.cfg.WebSocketPath, s.handleWebSocket)
 }
 
@@ -36,6 +37,18 @@ func defaultHealthReport() HealthReport {
 			"server": "ok",
 		},
 	}
+}
+
+func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
+	snapshots := []SourceSnapshot{}
+	if s.sources != nil {
+		snapshots = s.sources.Sources(r.Context())
+		if snapshots == nil {
+			snapshots = []SourceSnapshot{}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, snapshots)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value interface{}) {

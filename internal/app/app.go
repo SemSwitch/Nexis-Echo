@@ -22,6 +22,7 @@ type App struct {
 	services []runtime.Service
 	health   *healthAggregator
 	live     *liveBroker
+	sources  sourceStateProvider
 	srv      *server.Server
 }
 
@@ -36,6 +37,9 @@ func New(cfg config.Config, logger *slog.Logger) *App {
 
 	app.services = defaultServices(cfg, logger)
 	app.health = &healthAggregator{services: app.services}
+	for _, svc := range app.services {
+		app.bindRuntimeService(svc)
+	}
 	return app
 }
 
@@ -46,9 +50,20 @@ func defaultServices(cfg config.Config, logger *slog.Logger) []runtime.Service {
 		subjectRoot + ".output.closed.*",
 	}
 
+	buffer := runtime.NewBuffer(runtime.BufferConfig{}, logger)
+
 	return []runtime.Service{
+		buffer,
 		runtime.NewConsumer(runtime.ConsumerConfig{
-			Subjects: subjects,
+			ClientName:     "nexis-echo",
+			URL:            cfg.NATS.URL,
+			Queue:          cfg.NATS.Queue,
+			ConnectTimeout: cfg.NATS.ConnectTimeout.Std(),
+			ReconnectWait:  cfg.NATS.ReconnectWait.Std(),
+			MaxReconnects:  cfg.NATS.MaxReconnects,
+			RawSubject:     subjects[0],
+			ClosedSubject:  subjects[1],
+			Sink:           buffer,
 		}, logger),
 		runtime.NewSummarizer(runtime.SummarizerConfig{
 			MaxBatchSize: cfg.Summarizer.MaxBatchSize,
@@ -70,6 +85,7 @@ func (a *App) RegisterService(svc runtime.Service) {
 	if a.health != nil {
 		a.health.services = a.services
 	}
+	a.bindRuntimeService(svc)
 }
 
 // Run starts all registered services and the HTTP server, then blocks until
@@ -86,9 +102,10 @@ func (a *App) Run(ctx context.Context) error {
 		IdleTimeout:       a.cfg.HTTP.IdleTimeout.Std(),
 		WriteTimeout:      a.cfg.HTTP.WriteTimeout.Std(),
 	}, server.Dependencies{
-		Logger: a.logger,
-		Health: a.health,
-		Live:   a.live,
+		Logger:  a.logger,
+		Health:  a.health,
+		Live:    a.live,
+		Sources: a.sourcesProvider(),
 	})
 	a.publishRuntimeSnapshot()
 

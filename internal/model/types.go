@@ -67,11 +67,37 @@ type NotificationRecord struct {
 	TTSQueued   bool      `json:"tts_queued"`
 }
 
-// SourceState tracks the processing state of a single event source.
-type SourceState struct {
+// OutputBlock captures a finalized terminal-output block retained in memory
+// for later summarization or inspection.
+type OutputBlock struct {
+	ID         string    `json:"id"`
 	Source     string    `json:"source"`
 	Subject    string    `json:"subject,omitempty"`
-	LastSeenAt time.Time `json:"last_seen_at"`
-	EventCount int64     `json:"event_count"`
-	Active     bool      `json:"active"`
+	Content    string    `json:"content"`
+	Status     string    `json:"status,omitempty"`
+	DurationMS int64     `json:"duration_ms,omitempty"`
+	ClosedAt   time.Time `json:"closed_at"`
+	Final      bool      `json:"final"`
+}
+
+// SourceState tracks the processing state of a single event source.
+type SourceState struct {
+	Source        string    `json:"source"`
+	Subject       string    `json:"subject,omitempty"`
+	LastSeenAt    time.Time `json:"last_seen_at"`
+	LastClosedAt  time.Time `json:"last_closed_at,omitempty"`
+	LastStatus    string    `json:"last_status,omitempty"`
+	EventCount    int64     `json:"event_count"`
+	BufferedBytes int       `json:"buffered_bytes"`
+	ClosedCount   int64     `json:"closed_count"`
+	Active        bool      `json:"active"`
+}
+
+// RuntimeEvent is the runtime-owned live event shape used to bridge in-memory
+// runtime activity into transports such as WebSockets.
+type RuntimeEvent struct {
+	Type   string    `json:"type"`
+	Source string    `json:"source,omitempty"`
+	TS     time.Time `json:"ts"`
+	Data   any       `json:"data,omitempty"`
 }

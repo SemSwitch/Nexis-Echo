@@ -41,6 +41,24 @@ type HealthProvider interface {
 	Health(context.Context) HealthReport
 }
 
+// SourceSnapshot is the JSON shape returned from the sources endpoint.
+type SourceSnapshot struct {
+	Source        string    `json:"source"`
+	Subject       string    `json:"subject,omitempty"`
+	LastSeenAt    time.Time `json:"last_seen_at,omitempty"`
+	LastClosedAt  time.Time `json:"last_closed_at,omitempty"`
+	LastStatus    string    `json:"last_status,omitempty"`
+	EventCount    int64     `json:"event_count"`
+	BufferedBytes int       `json:"buffered_bytes"`
+	ClosedCount   int64     `json:"closed_count"`
+	Active        bool      `json:"active"`
+}
+
+// SourcesProvider supplies the current source-state read model to the HTTP layer.
+type SourcesProvider interface {
+	Sources(context.Context) []SourceSnapshot
+}
+
 // LiveEvent is the transport-neutral shape pushed over the live socket.
 type LiveEvent struct {
 	Type      string      `json:"type"`
@@ -55,9 +73,10 @@ type LiveSource interface {
 
 // Dependencies keeps the server package decoupled from runtime concerns.
 type Dependencies struct {
-	Logger *slog.Logger
-	Health HealthProvider
-	Live   LiveSource
+	Logger  *slog.Logger
+	Health  HealthProvider
+	Live    LiveSource
+	Sources SourcesProvider
 }
 
 // Server exposes minimal HTTP and WebSocket transport for Nexis Echo.
@@ -66,6 +85,7 @@ type Server struct {
 	logger     *slog.Logger
 	health     HealthProvider
 	live       LiveSource
+	sources    SourcesProvider
 	mux        *http.ServeMux
 	httpServer *http.Server
 }
@@ -75,11 +95,12 @@ func New(cfg Config, deps Dependencies) *Server {
 	cfg = cfg.withDefaults()
 
 	srv := &Server{
-		cfg:    cfg,
-		logger: deps.logger(),
-		health: deps.Health,
-		live:   deps.Live,
-		mux:    http.NewServeMux(),
+		cfg:     cfg,
+		logger:  deps.logger(),
+		health:  deps.Health,
+		live:    deps.Live,
+		sources: deps.Sources,
+		mux:     http.NewServeMux(),
 	}
 
 	srv.registerRoutes()

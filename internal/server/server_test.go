@@ -50,6 +50,54 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestSourcesEndpoint(t *testing.T) {
+	srv := New(Config{}, Dependencies{
+		Sources: staticSourcesProvider{
+			snapshots: []SourceSnapshot{
+				{
+					Source:        "default",
+					Subject:       "npng.output.raw.default",
+					LastSeenAt:    time.Date(2026, time.March, 12, 22, 5, 0, 0, time.UTC),
+					LastClosedAt:  time.Date(2026, time.March, 12, 22, 6, 0, 0, time.UTC),
+					LastStatus:    "success",
+					EventCount:    7,
+					BufferedBytes: 18,
+					ClosedCount:   3,
+					Active:        true,
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sources", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var snapshots []SourceSnapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &snapshots); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 source snapshot, got %d", len(snapshots))
+	}
+
+	if snapshots[0].Source != "default" {
+		t.Fatalf("expected source %q, got %q", "default", snapshots[0].Source)
+	}
+	if snapshots[0].LastStatus != "success" {
+		t.Fatalf("expected last status success, got %q", snapshots[0].LastStatus)
+	}
+	if snapshots[0].BufferedBytes != 18 {
+		t.Fatalf("expected buffered bytes 18, got %d", snapshots[0].BufferedBytes)
+	}
+}
+
 func TestWebSocketEndpointHandshakeAndInitialEvent(t *testing.T) {
 	srv := New(Config{}, Dependencies{})
 	testServer := httptest.NewServer(srv.Handler())
@@ -118,6 +166,14 @@ type staticHealthProvider struct {
 
 func (p staticHealthProvider) Health(context.Context) HealthReport {
 	return p.report
+}
+
+type staticSourcesProvider struct {
+	snapshots []SourceSnapshot
+}
+
+func (p staticSourcesProvider) Sources(context.Context) []SourceSnapshot {
+	return p.snapshots
 }
 
 func readFrame(reader *bufio.Reader) ([]byte, error) {
